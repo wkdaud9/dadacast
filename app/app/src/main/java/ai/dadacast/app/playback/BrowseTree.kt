@@ -1,6 +1,7 @@
 package ai.dadacast.app.playback
 
 import ai.dadacast.app.content.Episode
+import ai.dadacast.app.content.EpisodeLength
 import ai.dadacast.app.ux.UxLimits
 
 data class BrowseNode(
@@ -10,6 +11,8 @@ data class BrowseNode(
     val durationMs: Long = 0L,
     /** Series the node belongs to; picks its art. */
     val category: String = "",
+    /** Second line in the media list; for episodes, the length ("약 32분"). */
+    val subtitle: String = "",
 )
 
 /**
@@ -42,6 +45,15 @@ object BrowseTree {
     fun parentIds(episodes: List<Episode>): List<String> =
         listOf(ROOT_ID, ALL_EPISODES_ID) + episodes.map { it.category }.distinct()
 
-    private fun episodeNode(episode: Episode) =
-        BrowseNode(episode.id, episode.title, playable = true, durationMs = episode.estTotalSeconds * 1000L, category = episode.category)
+    private fun episodeNode(episode: Episode): BrowseNode {
+        val durationMs = episode.estTotalSeconds * 1000L
+        return BrowseNode(
+            episode.id,
+            episode.title,
+            playable = true,
+            durationMs = durationMs,
+            category = episode.category,
+            subtitle = EpisodeLength.label(durationMs),
+        )
+    }
 }

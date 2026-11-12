@@ -13,15 +13,15 @@
   - `stop`: 정차 상태에서만 열리는 말하기 연습. 아래 red_light_practice(신호대기 마이크로 연습)와 deferred_roleplays(주차·장시간 정차 롤플레이) 두 종류.
 - **red_light_practice**: 신호대기 마이크로 연습. 각 drive 청크(표현이 없는 인트로 제외)의 선택 필드. 주행 중 차량이 정차하면 현재 청크가 끝나는 경계에 삽입되어, 방금 들은 target_expression을 쓰도록 AI 파트너가 짧은 프롬프트 하나를 던지고(한 문장으로 답할 수 있는 질문), 사용자 답변 뒤 ai_followup(격려 또는 부드러운 교정) 한 마디로 끝남. max_turns 2, max_seconds 30. 차량 출발 신호가 오면 즉시 중단(재생 중인 문장까지만 마침)하고, 다음 청크 처음부터 drive 재생을 이어감. 영어 에피소드는 영어로, 한국어 에피소드(면접, 내 자료)는 한국어로 연습.
 - **deferred_roleplays**: 에피소드별 긴 롤플레이 목록. 선형 재생 위치가 없으며 trigger: parked_or_long_stop(기어 P 또는 60초 이상 정차)일 때만 제안·실행. 짧은 신호대기에는 열리지 않음. 출발 신호 시 즉시 종료하고 drive 재생으로 복귀. est_seconds_nominal은 60초 체크포인트 단위의 명목값, 최대 길이는 roleplay.max_session_minutes.
-- **pause_after_sec**: 해당 줄 재생 뒤 무음 길이(초). 따라 말하기 줄(shadow: true)은 2~4초.
+- **pause_after_sec**: 해당 줄 재생 뒤 무음 길이(초). 여러 문장인 줄은 마지막 문장 뒤에만 둠. 따라 말하기 줄(shadow: true)은 2~4초로 적되, 앱이 재생할 때 학습자가 그 줄을 따라 말하는 추정 시간(영어 초당 2단어, 한국어 초당 4음절) + 1.5초보다 짧으면 그만큼 늘림(최대 12초).
 - **shadow**: 선택 필드. true이면 따라 말하기용 문장.
-- **est_seconds**: drive 청크의 TTS 기준 추정 재생 시간(무음 포함).
-- **est_total_seconds**: 선형 drive 재생 시간 합계. 신호대기 연습과 롤플레이 시간은 제외.
+- **est_seconds**: drive 청크의 TTS 기준 추정 재생 시간(무음 포함). 따라 말하기 무음을 늘리기 전 값이며, 앱은 늘어난 무음만큼 더해 에피소드 길이와 진행 위치를 계산함.
+- **est_total_seconds**: 선형 drive 재생 시간 합계(따라 말하기 무음을 늘리기 전). 신호대기 연습과 롤플레이 시간은 제외.
 - **est_optional_seconds**: 선택적 정차 연습의 최대 시간 합계 (red_light_practice max_seconds 합 + deferred_roleplays 최대 세션 시간 합). 세부는 est_optional_breakdown.
 - **sections**: 선택 필드(에피소드). 긴 통근 편의 구간(워밍업·본편·복습) 표시. 각 항목은 section, title, chunk_ids, est_seconds. 앱 파서는 읽지 않으며, 같은 구간이 청크 제목 머리말(예: '워밍업 · ')로도 드러남.
 - **interruption**: 갑작스러운 운전 부하 신호(방향지시등)는 현재 문장이 끝나는 지점에서, 미리 알 수 있는 신호(회전 안내, 주의 지점)는 현재 청크 경계에서 멈춤. 내비 음성이 나오면 Audio Focus 정책에 따라 즉시 멈추고 양보. 재개 시 중단된 문장 처음부터 다시 재생(청크 처음으로 되돌아가지 않음). (신호대기 연습 후 복귀는 다음 청크부터)
 - **tts**: 지문·괄호·기호 없이 읽을 텍스트만 기재. 숫자는 읽는 형태로 표기.
-- 표기: 각 줄 끝 `⏸ n초`는 줄 뒤 무음, `[따라 말하기]`는 shadow 문장, `[신호대기 연습]`은 red_light_practice입니다.
+- 표기: 각 줄 끝 `⏸ n초`는 줄 뒤 무음(따라 말하기 줄은 앱이 위 규칙대로 늘릴 수 있음), `[따라 말하기]`는 shadow 문장, `[신호대기 연습]`은 red_light_practice입니다.
 
 ## 에피소드 목록
 

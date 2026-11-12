@@ -2,6 +2,7 @@ package ai.dadacast.app.practice
 
 import ai.dadacast.app.content.RedLightPractice
 import ai.dadacast.app.content.Roleplay
+import ai.dadacast.app.playback.PhraseSegments
 import ai.dadacast.app.speech.VoiceRole
 
 enum class PracticeKind { RED_LIGHT, ROLEPLAY }
@@ -33,7 +34,17 @@ data class PracticeScript(
 /** Turns content into practice steps. Spoken wording lives here so it stays plain and in one place. */
 object PracticeScripts {
     const val KOREAN = "ko-KR"
-    const val LISTEN_MS = 8_000L
+    /** Time to read the phrase on screen and then say it before "괜찮아요. 이어서 들을게요." */
+    const val LISTEN_MS = 12_000L
+    /** Extra listening time per display line beyond two, for longer phrases. */
+    const val LISTEN_PER_LINE_MS = 3_000L
+    const val MAX_LISTEN_MS = 24_000L
+
+    /** [LISTEN_MS], plus [LISTEN_PER_LINE_MS] per display line beyond two, at most [MAX_LISTEN_MS]. */
+    fun listenWindowMs(phrase: String): Long {
+        val extraLines = (PhraseSegments.lines(phrase).size - 2).coerceAtLeast(0)
+        return minOf(MAX_LISTEN_MS, LISTEN_MS + LISTEN_PER_LINE_MS * extraLines)
+    }
 
     const val OFFER_RED_LIGHT = "신호 대기 중이에요. 방금 표현을 한 번 말해 볼까요?"
     const val OFFER_ROLEPLAY = "차를 세워 두셨네요. 짧은 대화 연습을 해 볼게요. 대답하지 않으셔도 괜찮아요."
@@ -53,7 +64,7 @@ object PracticeScripts {
                 sampleAnswer = practice.sampleAnswer,
                 targetExpression = practice.targetExpression,
                 languageTag = practice.answerLanguage,
-                timeoutMs = minOf(LISTEN_MS, practice.maxSeconds * 1_000L),
+                timeoutMs = minOf(listenWindowMs(practice.sampleAnswer), practice.maxSeconds * 1_000L),
                 followup = practice.followup,
                 followupLanguage = practice.promptLanguage,
                 endOnMiss = false,
@@ -77,7 +88,7 @@ object PracticeScripts {
                     sampleAnswer = turn.text,
                     targetExpression = turn.text,
                     languageTag = turn.languageTag,
-                    timeoutMs = LISTEN_MS,
+                    timeoutMs = listenWindowMs(turn.text),
                     followup = null,
                     followupLanguage = turn.languageTag,
                     endOnMiss = true,

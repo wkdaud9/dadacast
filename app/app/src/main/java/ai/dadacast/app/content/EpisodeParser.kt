@@ -60,20 +60,36 @@ object EpisodeParser {
 
     fun languageOfText(text: String): String = if (text.any { it in '가'..'힣' }) KOREAN else ENGLISH
 
-    private fun parseChunk(obj: JSONObject, narration: String): Chunk = Chunk(
-        id = obj.getString("chunk_id"),
-        title = obj.getString("title"),
-        estSeconds = obj.getInt("est_seconds"),
-        sentences = obj.getJSONArray("script").objects().flatMap { line ->
+    /**
+     * A shadow line's silence may be longer than the content says ([ShadowGap]); the added time
+     * goes into the chunk's estSeconds, so the episode length, Media Center duration and the
+     * progress position (all built from estSeconds) include it.
+     */
+    private fun parseChunk(obj: JSONObject, narration: String): Chunk {
+        var addedMs = 0L
+        val sentences = obj.getJSONArray("script").objects().flatMap { line ->
+            val text = line.getString("text")
+            val languageTag = languageOf(line.getString("speaker"), text, narration)
+            val shadow = line.optBoolean("shadow", false)
+            val contentGapMs = line.optDouble("pause_after_sec", 0.0).toSecondsMs()
+            val gapMs = ShadowGap.gapMs(text, languageTag, shadow, contentGapMs)
+            addedMs += gapMs - contentGapMs
             sentencesOf(
-                text = line.getString("text"),
-                languageTag = languageOf(line.getString("speaker"), line.getString("text"), narration),
-                pauseAfterMs = line.optDouble("pause_after_sec", 0.0).toSecondsMs(),
+                text = text,
+                languageTag = languageTag,
+                pauseAfterMs = gapMs,
                 voice = voiceOf(line.getString("speaker")),
+                shadow = shadow,
             )
-        },
-        practice = obj.optJSONObject("red_light_practice")?.let(::parsePractice),
-    )
+        }
+        return Chunk(
+            id = obj.getString("chunk_id"),
+            title = obj.getString("title"),
+            estSeconds = obj.getInt("est_seconds") + ((addedMs + 500) / 1000).toInt(),
+            sentences = sentences,
+            practice = obj.optJSONObject("red_light_practice")?.let(::parsePractice),
+        )
+    }
 
     /**
      * `ai_partner` has no language suffix: in a drive chunk it voices the other party of an
@@ -86,10 +102,16 @@ object EpisodeParser {
         else -> narration
     }
 
-    private fun sentencesOf(text: String, languageTag: String, pauseAfterMs: Long, voice: VoiceRole): List<Sentence> {
+    private fun sentencesOf(
+        text: String,
+        languageTag: String,
+        pauseAfterMs: Long,
+        voice: VoiceRole,
+        shadow: Boolean = false,
+    ): List<Sentence> {
         val parts = SentenceSplitter.split(text)
         return parts.mapIndexed { i, part ->
-            Sentence(part, languageTag, if (i == parts.lastIndex) pauseAfterMs else 0L, voice)
+            Sentence(part, languageTag, if (i == parts.lastIndex) pauseAfterMs else 0L, voice, shadow)
         }
     }
 

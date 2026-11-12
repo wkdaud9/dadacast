@@ -6,6 +6,7 @@
 
     <string name="status_idle">듣고 싶은 에피소드를 골라 주세요</string>
     <string name="status_playing">재생 중</string>
+    <string name="status_shadow">따라 말해 보세요</string>
     <string name="status_ending_sentence">이 문장만 마치고 멈출게요</string>
     <string name="status_resuming">곧 이어서 들려드릴게요</string>
     <string name="status_paused">일시정지</string>
@@ -52,6 +53,5 @@
     <string name="category_interview">면접 연습</string>
     <string name="category_my_material">내 자료</string>
     <string name="category_other">그 밖의 에피소드</string>
-    <string name="minutes_format">%1$d분</string>
     <string name="section_format">%1$d / %2$d · %3$s</string>
 </resources>

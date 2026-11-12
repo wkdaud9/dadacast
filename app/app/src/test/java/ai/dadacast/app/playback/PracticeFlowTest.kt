@@ -135,6 +135,8 @@ class PracticeFlowTest {
         talkUntilListenOrEnd()
         assertEquals("c1-s0", spoken.last())
         assertEquals(1, spoken.count { it == practice.sampleAnswer })
+        assertEquals(listOf(PracticeScripts.MISS, practice.sampleAnswer, PracticeScripts.DONE), spoken.takeLast(4).take(3))
+        assertFalse(spoken.contains(PracticeScripts.SILENT))
     }
 
     @Test
@@ -145,6 +147,7 @@ class PracticeFlowTest {
         talkUntilListenOrEnd()
         val timer = effects.filterIsInstance<PlayerEffect.StartTimer>().single()
         assertEquals(PracticeScripts.LISTEN_MS, timer.delayMs)
+        assertEquals(12_000L, timer.delayMs)
         send(PlayerEvent.TimerFired(timer.token))
         assertTrue(effects.contains(PlayerEffect.StopListening))
         assertEquals(PracticeScripts.SILENT, spoken.last())
@@ -197,9 +200,26 @@ class PracticeFlowTest {
         talkUntilListenOrEnd()
         assertEquals("c1-s0", spoken.last())
         assertFalse(spoken.contains("Thank you."))
+        // A tried but wrong answer ends with "그럼 이어서 들을게요.", not the silent "괜찮아요" line.
+        assertEquals(listOf(PracticeScripts.MISS, "Here you go.", PracticeScripts.DONE), spoken.takeLast(4).take(3))
+        assertFalse(spoken.contains(PracticeScripts.SILENT))
         // Next boundary while still parked: the roleplay is done, the chunk practice is offered.
         done()
         assertEquals(PracticeScripts.OFFER_RED_LIGHT, spoken.last())
+    }
+
+    @Test
+    fun `saying nothing in the roleplay ends it with the silent line`() {
+        send(PlayerEvent.Play(0))
+        send(PlayerEvent.StopChanged(StopContext.PARKED))
+        done()
+        talkUntilListenOrEnd()
+        val timer = effects.filterIsInstance<PlayerEffect.StartTimer>().single()
+        send(PlayerEvent.TimerFired(timer.token))
+        assertEquals(PracticeScripts.SILENT, spoken.last())
+        done()
+        assertEquals("c1-s0", spoken.last())
+        assertFalse(spoken.contains(PracticeScripts.DONE))
     }
 
     @Test

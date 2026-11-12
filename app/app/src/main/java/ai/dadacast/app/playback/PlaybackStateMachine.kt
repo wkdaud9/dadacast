@@ -35,6 +35,10 @@ data class PracticeView(
     val noMicInput: Boolean = false,
     val transcript: String?,
     val verdict: Verdict?,
+    /** What has been heard so far in the open listening window (live, partial); null otherwise. */
+    val heardSoFar: String? = null,
+    /** Display line of [targetPhrase] the speaker has reached in the open window; never goes back. */
+    val line: Int = 0,
 )
 
 data class PlayerSnapshot(
@@ -44,6 +48,8 @@ data class PlayerSnapshot(
     val sentenceIndex: Int,
     val holdReason: DrivingSignal?,
     val practice: PracticeView? = null,
+    /** A repeat-after-me line is being spoken, or its silence is running. */
+    val shadowLine: Boolean = false,
 ) {
     /** True while the app owes the driver audio, including while waiting out a driving signal. */
     val wantsAudio: Boolean
@@ -72,6 +78,8 @@ sealed interface PlayerEvent {
     /** Null means nothing usable was heard. */
     data class Heard(val token: Long, val transcript: String?) : PlayerEvent
     data class SpeechEnded(val token: Long) : PlayerEvent
+    /** Live text of the answer so far, while the speaker is still talking. */
+    data class Partial(val token: Long, val transcript: String) : PlayerEvent
     /** Wipers running (rain): no red-light practice. */
     data class WiperChanged(val running: Boolean) : PlayerEvent
     /** The microphone picked up sound above the noise floor in this listening window. */
@@ -90,7 +98,17 @@ sealed interface PlayerEffect {
     data object StopSpeech : PlayerEffect
     data class StartTimer(val token: Long, val delayMs: Long) : PlayerEffect
     data object CancelTimer : PlayerEffect
-    data class Listen(val token: Long, val languageTag: String) : PlayerEffect
+    /**
+     * Opens one answer turn of up to [windowMs]. The expected answer lets the recogniser keep
+     * listening across a short pause until the answer is mostly there.
+     */
+    data class Listen(
+        val token: Long,
+        val languageTag: String,
+        val sampleAnswer: String = "",
+        val targetExpression: String = "",
+        val windowMs: Long = PracticeScripts.LISTEN_MS,
+    ) : PlayerEffect
     data object StopListening : PlayerEffect
 }
 
@@ -130,6 +148,10 @@ class PlaybackStateMachine(
     private var lastTranscript: String? = null
     private var lastVerdict: Verdict? = null
     private var checking = false
+    /** Live transcript of the open listening window. */
+    private var heardSoFar: String? = null
+    /** Furthest display line of [practicePhrase] the live transcript has reached in this window. */
+    private var followedLine = 0
     private var wiperRunning = false
     private var inputThisWindow = false
     private var silentWindows = 0
@@ -153,7 +175,7 @@ class PlaybackStateMachine(
     private var token = 0L
 
     val snapshot: PlayerSnapshot
-        get() = PlayerSnapshot(status(), episode, chunk, sentence, holdReason(), practiceView())
+        get() = PlayerSnapshot(status(), episode, chunk, sentence, holdReason(), practiceView(), shadowLine())
 
     fun handle(event: PlayerEvent): List<PlayerEffect> {
         val out = mutableListOf<PlayerEffect>()
@@ -192,9 +214,17 @@ class PlaybackStateMachine(
             is PlayerEvent.SpeechEnded -> if (phase == Phase.PRACTICE && listeningFor != null && event.token == token) {
                 checking = true
             }
+            is PlayerEvent.Partial -> if (phase == Phase.PRACTICE && listeningFor != null && event.token == token) {
+                // New words mean the speaker is still talking, so it is not being checked yet.
+                if (event.transcript.isNotBlank()) {
+                    heardSoFar = event.transcript
+                    checking = false
+                    followedLine = maxOf(followedLine, PhraseSegments.followLine(PhraseSegments.lines(practicePhrase), event.transcript))
+                }
+            }
             is PlayerEvent.Heard -> if (phase == Phase.PRACTICE && listeningFor != null && event.token == token) {
                 out += PlayerEffect.CancelTimer
-                answer(event.transcript, out)
+                answer(event.transcript ?: heardSoFar, out)
             }
         }
         return out
@@ -347,8 +377,9 @@ class PlaybackStateMachine(
 
     private fun timerFired(out: MutableList<PlayerEffect>) {
         if (phase == Phase.PRACTICE && listeningFor != null) {
+            // The window is over: whatever was heard so far is the answer.
             out += PlayerEffect.StopListening
-            answer(null, out)
+            answer(heardSoFar, out)
             return
         }
         token++
@@ -490,7 +521,9 @@ class PlaybackStateMachine(
                 practicePhrase = step.sampleAnswer
                 lastTranscript = null
                 lastVerdict = null
-                out += PlayerEffect.Listen(token, step.languageTag)
+                heardSoFar = null
+                followedLine = 0
+                out += PlayerEffect.Listen(token, step.languageTag, step.sampleAnswer, step.targetExpression, step.timeoutMs)
                 out += PlayerEffect.StartTimer(token, step.timeoutMs)
             }
         }
@@ -500,6 +533,7 @@ class PlaybackStateMachine(
         val listen = listeningFor ?: return
         silentWindows = if (inputThisWindow || transcript != null) 0 else silentWindows + 1
         listeningFor = null
+        heardSoFar = null
         val reply = coach.reply(listen, transcript)
         lastTranscript = transcript
         lastVerdict = reply.verdict
@@ -518,6 +552,7 @@ class PlaybackStateMachine(
         practiceSteps.clear()
         practiceKind = null
         listeningFor = null
+        heardSoFar = null
     }
 
     /** Ends whatever speech, listening or timer is outstanding and invalidates its token. */
@@ -543,7 +578,8 @@ class PlaybackStateMachine(
 
     private fun practiceView(): PracticeView? {
         val kind = practiceKind ?: return null
-        if (phase != Phase.PRACTICE) return null
+        // The phrase is on-screen text: never while the car moves.
+        if (phase != Phase.PRACTICE || stopContext == StopContext.NONE) return null
         return PracticeView(
             kind = kind,
             targetPhrase = practicePhrase,
@@ -552,8 +588,13 @@ class PlaybackStateMachine(
             noMicInput = silentWindows >= NO_INPUT_WINDOWS,
             transcript = lastTranscript,
             verdict = lastVerdict,
+            heardSoFar = heardSoFar.takeIf { listeningFor != null },
+            line = if (listeningFor != null) followedLine else 0,
         )
     }
+
+    private fun shadowLine(): Boolean =
+        (phase == Phase.SPEAKING || phase == Phase.GAP) && currentSentence().shadow
 
     private fun currentSentence() = episodes[episode].chunks[chunk].sentences[sentence]
 

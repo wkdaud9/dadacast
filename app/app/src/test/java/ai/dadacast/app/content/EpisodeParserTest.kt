@@ -26,7 +26,8 @@ class EpisodeParserTest {
         val first = episodes.first()
         assertEquals("ep01_hotel_checkin", first.id)
         assertEquals(9, first.chunks.size)
-        assertEquals(392, first.estTotalSeconds)
+        // 392 s in the content plus the stretched shadow silences (ShadowGap).
+        assertEquals(430, first.estTotalSeconds)
         val languages = episodes.flatMap { e -> e.chunks.flatMap { c -> c.sentences.map { it.languageTag } } }.toSet()
         assertEquals(setOf("ko-KR", "en-US"), languages)
         assertEquals(43, episodes.single { it.id == "ep06_commute_running_late" }.chunks.size)

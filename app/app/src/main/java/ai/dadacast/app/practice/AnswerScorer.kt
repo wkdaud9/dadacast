@@ -7,7 +7,8 @@ enum class Verdict { GOOD, CLOSE, MISS, SILENT }
 /**
  * On-device answer check, no model involved. English is compared word by word, Korean by
  * two-letter pieces so spacing and particles matter less. `~` in a target expression marks a slot
- * the speaker fills freely; only the fixed parts are required.
+ * the speaker fills freely; only the fixed parts are required. Words are matched loosely
+ * ([WordMatch.similar]) so a speech-to-text slip like "pussie" for "push" still counts.
  */
 object AnswerScorer {
     const val GOOD_AT = 0.7
@@ -38,7 +39,8 @@ object AnswerScorer {
             .replace(Regex("\\s+"), " ")
             .trim()
 
-    private fun units(text: String): List<String> {
+    /** Comparison units: English words, or two-letter pieces of Korean. */
+    fun units(text: String): List<String> {
         val normalized = normalize(text)
         if (normalized.isEmpty()) return emptyList()
         return if (normalized.any { it in '가'..'힣' }) {
@@ -51,15 +53,6 @@ object AnswerScorer {
 
     private fun coverage(expected: List<String>, heard: List<String>): Double {
         if (expected.isEmpty()) return 0.0
-        val pool = heard.groupingBy { it }.eachCount().toMutableMap()
-        var hits = 0
-        for (unit in expected) {
-            val left = pool[unit] ?: 0
-            if (left > 0) {
-                hits++
-                pool[unit] = left - 1
-            }
-        }
-        return hits.toDouble() / expected.size
+        return WordMatch.take(expected, heard.toMutableList()).toDouble() / expected.size
     }
 }

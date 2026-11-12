@@ -122,6 +122,7 @@ class DadaCastService : MediaBrowserServiceCompat(), SpeechEngine.Listener, Audi
 
                 override fun onSpeechEnded(token: Long) = dispatch(PlayerEvent.SpeechEnded(token))
                 override fun onInputDetected(token: Long) = dispatch(PlayerEvent.InputDetected(token))
+                override fun onPartial(token: Long, transcript: String) = dispatch(PlayerEvent.Partial(token, transcript))
             })
         }
         uxMonitor = UxRestrictionsMonitor(this, ::onUxLimitsChanged).also { it.start() }
@@ -231,6 +232,7 @@ class DadaCastService : MediaBrowserServiceCompat(), SpeechEngine.Listener, Audi
         MediaDescriptionCompat.Builder()
             .setMediaId(node.id)
             .setTitle(node.title)
+            .apply { if (node.subtitle.isNotEmpty()) setSubtitle(node.subtitle) }
             .setIconUri(Uri.parse(artUri(node.category)))
             .setExtras(
                 Bundle().apply {
@@ -353,7 +355,11 @@ class DadaCastService : MediaBrowserServiceCompat(), SpeechEngine.Listener, Audi
             PlayerEffect.CancelTimer -> cancelTimer()
             is PlayerEffect.Listen -> {
                 Log.i(TAG, "listen [${effect.languageTag}]")
-                recognizer.listen(effect.token, effect.languageTag)
+                recognizer.listen(
+                    effect.token,
+                    effect.languageTag,
+                    SpeechRecognizerEngine.Expected(effect.sampleAnswer, effect.targetExpression, effect.windowMs),
+                )
             }
             PlayerEffect.StopListening -> recognizer.stop()
         }
@@ -400,7 +406,8 @@ class DadaCastService : MediaBrowserServiceCompat(), SpeechEngine.Listener, Audi
 
     private fun publish() {
         val snapshot = machine.snapshot
-        val statusText = statusText(snapshot)
+        val lines = shownLines(snapshot)
+        val statusText = lines.subtitle
         if (snapshot != publishedSnapshot) {
             publishedSnapshot = snapshot
             savePosition(snapshot)
@@ -408,7 +415,7 @@ class DadaCastService : MediaBrowserServiceCompat(), SpeechEngine.Listener, Audi
         }
         audioPresence.setActive(snapshot.status == PlayerStatus.PLAYING || snapshot.status == PlayerStatus.ENDING_SENTENCE)
         session.setPlaybackState(playbackState(snapshot))
-        updateMetadata(snapshot, statusText)
+        updateMetadata(snapshot, lines)
         if (snapshot.wantsAudio) enterForeground() else leaveForeground(snapshot.status == PlayerStatus.FINISHED)
     }
 
@@ -441,6 +448,7 @@ class DadaCastService : MediaBrowserServiceCompat(), SpeechEngine.Listener, Audi
                 Bundle().apply {
                     putString(EXTRA_STATUS, snapshot.status.name)
                     putString(EXTRA_HOLD_REASON, snapshot.holdReason?.name)
+                    putBoolean(EXTRA_SHADOW_LINE, snapshot.shadowLine)
                     snapshot.practice?.let { practice ->
                         putString(EXTRA_PRACTICE_KIND, practice.kind.name)
                         putString(EXTRA_PRACTICE_PHRASE, practice.targetPhrase)
@@ -469,21 +477,25 @@ class DadaCastService : MediaBrowserServiceCompat(), SpeechEngine.Listener, Audi
         return ((before + within) * 1000).toLong()
     }
 
-    private fun updateMetadata(snapshot: PlayerSnapshot, fullStatusText: String) {
+    private fun updateMetadata(snapshot: PlayerSnapshot, lines: ShownLines) {
         val episode = episodes.getOrNull(snapshot.episodeIndex) ?: return
         val limits = UxRestrictionsState.limits.value
-        val title = limits.limitTitle(episode.title)
-        val statusText = limits.limitTitle(fullStatusText)
+        val title = limits.limitTitle(lines.title ?: episode.title)
+        val statusText = limits.limitTitle(lines.subtitle)
         if (snapshot.episodeIndex == publishedEpisode && statusText == publishedSubtitle && title == publishedTitle) return
         publishedEpisode = snapshot.episodeIndex
         publishedSubtitle = statusText
         publishedTitle = title
+        // During a practice TITLE carries the phrase; MEDIA_ID stays the episode so the media
+        // app's list highlight and mini player keep pointing at it, and EPISODE_TITLE keeps the
+        // real title for our own screen.
         session.setMetadata(
             MediaMetadataCompat.Builder()
                 .putString(MediaMetadataCompat.METADATA_KEY_MEDIA_ID, episode.id)
                 .putString(MediaMetadataCompat.METADATA_KEY_TITLE, title)
                 .putString(MediaMetadataCompat.METADATA_KEY_DISPLAY_TITLE, title)
                 .putString(MediaMetadataCompat.METADATA_KEY_DISPLAY_SUBTITLE, statusText)
+                .putString(METADATA_EPISODE_TITLE, episode.title)
                 .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, getString(R.string.host_name))
                 .putString(MediaMetadataCompat.METADATA_KEY_ALBUM, getString(R.string.app_name))
                 .putLong(MediaMetadataCompat.METADATA_KEY_DURATION, episode.estTotalSeconds * 1000L)
@@ -495,22 +507,17 @@ class DadaCastService : MediaBrowserServiceCompat(), SpeechEngine.Listener, Audi
         )
     }
 
+    /** What the now-playing view shows; a null [title] means the episode title. */
+    private class ShownLines(val title: String?, val subtitle: String)
+
     /**
-     * Practice runs by voice; the media app and mini player show it through this line, with the
-     * phrase to say when it fits.
+     * Outside a practice: episode title and status. During a stopped-car practice: the line to say
+     * now and, below it, the next line (or a short status on the last line); the lines roll up as
+     * the speaker's live transcript reaches the end of a line (see [nowPlayingLines]).
      */
-    private fun statusText(snapshot: PlayerSnapshot): String {
-        val practice = snapshot.practice
-            ?: return getString(statusTextRes(snapshot.status, snapshot.holdReason))
-        if (practice.noMicInput && practice.listening) return getString(R.string.status_no_mic)
-        val base = getString(
-            when {
-                practice.checking -> R.string.status_checking
-                practice.listening -> R.string.status_listening
-                else -> R.string.status_practice
-            }
-        )
-        return if (practice.targetPhrase.isBlank()) base else "$base · ${practice.targetPhrase}"
+    private fun shownLines(snapshot: PlayerSnapshot): ShownLines = when (val lines = nowPlayingLines(snapshot)) {
+        is NowPlayingLines.Status -> ShownLines(null, getString(lines.res))
+        is NowPlayingLines.Phrase -> ShownLines(lines.title, lines.next ?: getString(lines.statusRes))
     }
 
     /**
@@ -577,9 +584,12 @@ class DadaCastService : MediaBrowserServiceCompat(), SpeechEngine.Listener, Audi
         const val EXTRA_STATUS = "ai.dadacast.app.STATUS"
         private const val REANNOUNCE_DELAY_MS = 1_500L
         const val EXTRA_HOLD_REASON = "ai.dadacast.app.HOLD_REASON"
+        const val EXTRA_SHADOW_LINE = "ai.dadacast.app.SHADOW_LINE"
         const val EXTRA_SECTION_INDEX = "ai.dadacast.app.SECTION_INDEX"
         const val EXTRA_SECTION_COUNT = "ai.dadacast.app.SECTION_COUNT"
         const val EXTRA_SECTION_TITLE = "ai.dadacast.app.SECTION_TITLE"
+        /** Metadata key: the episode's own title, while TITLE may hold a practice phrase. */
+        const val METADATA_EPISODE_TITLE = "ai.dadacast.app.EPISODE_TITLE"
         const val EXTRA_DURATION_MS = "ai.dadacast.app.DURATION_MS"
         const val EXTRA_CATEGORY = "ai.dadacast.app.CATEGORY"
         const val EXTRA_PRACTICE_CHECKING = "ai.dadacast.app.PRACTICE_CHECKING"

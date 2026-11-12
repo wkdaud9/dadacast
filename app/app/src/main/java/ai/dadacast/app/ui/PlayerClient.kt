@@ -21,6 +21,7 @@ data class PlayerUiState(
     val episodes: List<EpisodeItem> = emptyList(),
     val status: PlayerStatus = PlayerStatus.IDLE,
     val holdReason: DrivingSignal? = null,
+    val shadowLine: Boolean = false,
     val currentId: String? = null,
     val currentTitle: String = "",
     val positionMs: Long = 0L,
@@ -139,6 +140,7 @@ class PlayerClient(context: Context) {
         _state.value = _state.value.copy(
             status = extras?.getString(DadaCastService.EXTRA_STATUS)?.let(PlayerStatus::valueOf) ?: PlayerStatus.IDLE,
             holdReason = extras?.getString(DadaCastService.EXTRA_HOLD_REASON)?.let(DrivingSignal::valueOf),
+            shadowLine = extras?.getBoolean(DadaCastService.EXTRA_SHADOW_LINE) ?: false,
             positionMs = state.position,
             sectionIndex = extras?.getInt(DadaCastService.EXTRA_SECTION_INDEX) ?: 0,
             sectionCount = extras?.getInt(DadaCastService.EXTRA_SECTION_COUNT) ?: 0,
@@ -156,7 +158,9 @@ class PlayerClient(context: Context) {
         metadata ?: return
         _state.value = _state.value.copy(
             currentId = metadata.getString(MediaMetadataCompat.METADATA_KEY_MEDIA_ID),
-            currentTitle = metadata.getString(MediaMetadataCompat.METADATA_KEY_TITLE).orEmpty(),
+            // TITLE holds the practice phrase during a practice; the episode title travels separately.
+            currentTitle = (metadata.getString(DadaCastService.METADATA_EPISODE_TITLE)
+                ?: metadata.getString(MediaMetadataCompat.METADATA_KEY_TITLE)).orEmpty(),
             currentCategory = metadata.getString(MediaMetadataCompat.METADATA_KEY_GENRE),
             durationMs = metadata.getLong(MediaMetadataCompat.METADATA_KEY_DURATION),
         )

@@ -37,7 +37,8 @@ class LocalCoach : PracticeCoach {
                 listOfNotNull(
                     PracticeStep.Say(PracticeScripts.MISS, ko),
                     model,
-                    PracticeStep.Say(PracticeScripts.SILENT, ko).takeIf { listen.endOnMiss },
+                    // "괜찮아요" is for saying nothing; a tried answer just moves on.
+                    PracticeStep.Say(PracticeScripts.DONE, ko).takeIf { listen.endOnMiss },
                 ),
                 endPractice = listen.endOnMiss,
             )

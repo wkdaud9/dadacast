@@ -43,6 +43,8 @@ class BrowseTreeTest {
         val english = children("english", UxLimits())
         assertEquals(listOf("a", "b", "c"), english.map { it.id })
         assertTrue(english.all { it.playable && it.durationMs == 60_000L })
+        assertTrue(english.all { it.subtitle == "약 1분" })
+        assertTrue(children(BrowseTree.ROOT_ID, UxLimits()).all { it.subtitle.isEmpty() })
         assertEquals(4, children(BrowseTree.ALL_EPISODES_ID, UxLimits()).size)
     }
 

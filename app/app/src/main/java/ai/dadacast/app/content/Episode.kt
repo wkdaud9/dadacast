@@ -6,9 +6,14 @@ import ai.dadacast.app.speech.VoiceRole
 data class Sentence(
     val text: String,
     val languageTag: String,
-    /** Silence after this sentence; only the last sentence of a line carries `pause_after_sec`. */
+    /**
+     * Silence after this sentence; only the last sentence of a line carries `pause_after_sec`,
+     * stretched by [ShadowGap] on a shadow line.
+     */
     val pauseAfterMs: Long,
     val voice: VoiceRole = VoiceRole.NARRATOR,
+    /** `shadow: true`: a repeat-after-me line, followed by a silence to say it in. */
+    val shadow: Boolean = false,
 )
 
 data class Chunk(

@@ -1,7 +1,8 @@
 package ai.dadacast.app.ui
 
 import ai.dadacast.app.R
-import ai.dadacast.app.playback.statusTextRes
+import ai.dadacast.app.content.EpisodeLength
+import ai.dadacast.app.playback.drivingStatusRes
 import ai.dadacast.app.ux.UxLimits
 import android.content.Intent
 import androidx.annotation.DrawableRes
@@ -161,12 +162,11 @@ private fun PracticeScreen(state: PlayerUiState, limits: UxLimits) {
                 Text(stringResource(R.string.status_no_mic), style = DadaType.bodyLargeStrong, color = c.text)
             }
             Spacer(Modifier.height(24.dp))
+            // Practice runs only while the car is stopped: the whole phrase, wrapped over as many lines as it needs.
             Text(
                 limits.limitTitle(state.practicePhrase.orEmpty()),
                 style = DadaType.titleLarge,
                 color = c.text,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
             )
             state.practiceTranscript?.let { heard ->
                 Spacer(Modifier.height(24.dp))
@@ -230,7 +230,7 @@ private fun EpisodeListScreen(state: PlayerUiState, limits: UxLimits, onSelect: 
                     modifier = Modifier.weight(1f),
                 )
                 Text(
-                    stringResource(R.string.minutes_format, (episode.durationMs / 60_000).toInt().coerceAtLeast(1)),
+                    EpisodeLength.label(episode.durationMs),
                     style = DadaType.bodyMedium,
                     color = c.textSecondary,
                     modifier = Modifier.padding(start = 24.dp),
@@ -263,7 +263,12 @@ private fun NowPlayingScreen(state: PlayerUiState, limits: UxLimits, player: Pla
                     overflow = TextOverflow.Ellipsis,
                 )
                 Spacer(Modifier.height(16.dp))
-                Text(stringResource(statusTextRes(state.status, state.holdReason)), style = DadaType.titleMedium, color = c.accent)
+                // Status only: no sentence text on this screen while driving.
+                Text(
+                    stringResource(drivingStatusRes(state.status, state.holdReason, state.shadowLine)),
+                    style = DadaType.titleMedium,
+                    color = c.accent,
+                )
                 if (limits.showDetails && state.sectionCount > 0) {
                     Spacer(Modifier.height(8.dp))
                     Text(

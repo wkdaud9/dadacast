@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <!-- Debug builds only: lets adb simulate another app taking audio focus. -->
+        <receiver
+            android:name=".debug.FocusProbeReceiver"
+            android:exported="true" />
+        <!-- Debug builds only: feeds recorded speech to the next listen instead of the microphone. -->
+        <receiver
+            android:name=".debug.SpeechFeedReceiver"
+            android:exported="true" />
+        <!-- Debug builds only: simulates a turn-by-turn update from the navigation app. -->
+        <receiver
+            android:name=".debug.TurnGuidanceReceiver"
+            android:exported="true" />
+    </application>
+</manifest>

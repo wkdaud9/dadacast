@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Pleos basic_50 (light) for the window behind our screens. -->
+    <color name="window_background">#FFF7F8FA</color>
+    <color name="icon_background">#FF2F6BEB</color>
+</resources>

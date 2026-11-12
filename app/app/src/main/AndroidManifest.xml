@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-feature
+        android:name="android.hardware.type.automotive"
+        android:required="true" />
+
+    <!-- Vehicle SDK: TurnSignal needs CAR_LIGHTS, Brake (stop detection) needs CAR_DRIVE. -->
+    <uses-permission android:name="pleos.car.permission.CAR_LIGHTS" />
+    <uses-permission android:name="pleos.car.permission.CAR_DRIVE" />
+    <!-- Vehicle SDK: Wiper state (rain) needs CAR_WINDOWS. -->
+    <uses-permission android:name="pleos.car.permission.CAR_WINDOWS" />
+    <!-- Standard AAOS vehicle speed, used to tell a standing car from a moving one. -->
+    <uses-permission android:name="android.car.permission.CAR_SPEED" />
+    <!-- SpeechToText SDK. -->
+    <uses-permission android:name="pleos.car.permission.STT_SERVICE" />
+    <!-- NaviHelper guidance callbacks (declared as in the navi sample). -->
+    <uses-permission android:name="pleos.car.permission.NAVI_ROUTE" />
+    <!-- TextToSpeech SDK. -->
+    <uses-permission android:name="pleos.car.permission.TTS_SERVICE" />
+
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+
+    <application
+        android:allowBackup="false"
+        android:appCategory="audio"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.DadaCast">
+
+        <uses-library
+            android:name="android.car"
+            android:required="false" />
+
+        <meta-data
+            android:name="androidx.car.app.launchable"
+            android:value="true" />
+        <meta-data
+            android:name="com.android.automotive"
+            android:resource="@xml/automotive_app_desc" />
+
+        <activity
+            android:name=".ui.MainActivity"
+            android:exported="true"
+            android:launchMode="singleTask">
+            <!--
+                No MAIN/LAUNCHER filter on purpose: the system only treats an app with no launcher
+                activity as a media template app, which is what puts it in the Media Center and
+                the system mini player. The launcher entry comes from the media browser service
+                via androidx.car.app.launchable.
+            -->
+            <!-- Allows this activity to stay on screen while driving. -->
+            <meta-data
+                android:name="distractionOptimized"
+                android:value="true" />
+        </activity>
+
+        <!--
+            Vehicle data and voice choice. Not distraction optimized, so it only opens when parked.
+            APPLICATION_PREFERENCES lets the media app offer it as this app's settings.
+        -->
+        <activity
+            android:name=".ui.ConsentActivity"
+            android:exported="true"
+            android:label="@string/settings">
+            <intent-filter>
+                <action android:name="android.intent.action.APPLICATION_PREFERENCES" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
+        <service
+            android:name=".playback.DadaCastService"
+            android:exported="true"
+            android:foregroundServiceType="mediaPlayback">
+            <intent-filter>
+                <action android:name="android.media.browse.MediaBrowserService" />
+            </intent-filter>
+        </service>
+    </application>
+</manifest>

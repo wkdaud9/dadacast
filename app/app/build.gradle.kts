@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -18,9 +20,37 @@ android {
         versionName = "0.1.0"
     }
 
+    // Release signing: read from a keystore.properties kept OUTSIDE the repo
+    // (default ../../_keystore/keystore.properties, override with -PdadacastKeystoreProps=<path>).
+    // If it is missing, release falls back to the debug signing config so the public repo still builds.
+    val keystorePropsFile = rootProject.file(
+        (project.findProperty("dadacastKeystoreProps") as String?) ?: "../_keystore/keystore.properties"
+    )
+    val hasReleaseKeystore = keystorePropsFile.exists()
+
+    signingConfigs {
+        if (hasReleaseKeystore) {
+            val props = Properties().apply { keystorePropsFile.inputStream().use { load(it) } }
+            create("release") {
+                storeFile = file(props.getProperty("storeFile"))
+                storePassword = props.getProperty("storePassword")
+                keyAlias = props.getProperty("keyAlias")
+                keyPassword = props.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
+            // Keep R8 off: shrinking/obfuscation can break the Pleos SDKs.
             isMinifyEnabled = false
+            isShrinkResources = false
+            isDebuggable = false
+            signingConfig = if (hasReleaseKeystore) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
